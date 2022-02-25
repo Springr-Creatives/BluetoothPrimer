@@ -10,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -23,6 +24,7 @@ import androidx.core.content.ContextCompat;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.util.Set;
 import java.util.UUID;
 
@@ -53,18 +55,23 @@ public class MainActivity extends AppCompatActivity {
 
         buttonConnect.setOnClickListener(v -> {
             findBluetoothDevice();
-            try {
-                openBluetoothConnection();
-            } catch (IOException e) {
-                Log.e("OPEN_EROR","HERE");
-            }
+            final Handler handler = new Handler(Looper.getMainLooper());
+            handler.postDelayed(() -> {
+                try {
+                    openBluetoothConnection();
+                } catch (IOException e) {
+                    textStatus.setText("MESSAGE>" + e.getMessage());
+                    Log.e("OPEN_EROR", "HERE");
+                }
+            }, 1000);
+
         });
 
         buttonON.setOnClickListener(v -> {
             try {
                 sendData("RELAY1 ON");
             } catch (IOException e) {
-                Log.e("SEND_EROR1","HERE");
+                Log.e("SEND_EROR1", "HERE");
             }
         });
 
@@ -72,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 sendData("RELAY1 OFF");
             } catch (IOException e) {
-                Log.e("SEND_EROR2","HERE");
+                Log.e("SEND_EROR2", "HERE");
             }
         });
 
@@ -82,7 +89,7 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     closeBluetoothConnection();
                 } catch (IOException e) {
-                    Log.e("CLOSE_EROR","HERE");
+                    Log.e("CLOSE_EROR", "HERE");
                 }
             }
         });
@@ -120,7 +127,26 @@ public class MainActivity extends AppCompatActivity {
     void openBluetoothConnection() throws IOException {
         UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"); //serial ports uuid
         bluetoothSocket = bluetoothDevice.createRfcommSocketToServiceRecord(uuid);
-        bluetoothSocket.connect();
+        try {
+            bluetoothSocket.connect(); //fail here
+        } catch (Exception e) {
+            try {
+                Class<?> clazz = bluetoothSocket.getRemoteDevice().getClass();
+                Class<?>[] paramTypes = new Class<?>[]{Integer.TYPE};
+                Method m = clazz.getMethod("createRfcommSocket", paramTypes);
+                Object[] params = new Object[]{Integer.valueOf(1)};
+                bluetoothSocket = (BluetoothSocket) m.invoke(bluetoothSocket.getRemoteDevice(), params);
+                if (bluetoothSocket != null) {
+                    Thread.sleep(1000);
+                    bluetoothSocket.connect();
+                } else {
+                    Log.d("ERR", "fallback_socket received null....: ");
+                }
+            } catch (Exception ex) {
+                Log.e("ERR", "exception_in_code....: " + e);
+                e.printStackTrace();
+            }
+        }
         outputStream = bluetoothSocket.getOutputStream();
         inputStream = bluetoothSocket.getInputStream();
         beginListenForData();
